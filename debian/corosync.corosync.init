@@ -1,0 +1,108 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          corosync
+# Required-Start:    $network $remote_fs $syslog
+# Required-Stop:     $network $remote_fs $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Corosync Cluster Engine
+# Description:       Manages the Corosync Cluster Engine.
+### END INIT INFO
+
+# LSB counterpart of corosync.service, only installed by the
+# pkg.corosync.lsbservice build (see debian/rules). Like the unit (with the
+# 0002-only-start-corosync.service-if-conf-exists patch), it doesn't start
+# corosync without /etc/corosync/corosync.conf, which a node only has once
+# it's part of a cluster, so it can stay enabled; nor with 'nocluster' on the
+# kernel command line. Like Type=notify, start waits until corosync's IPC
+# is up; stop asks corosync to leave the cluster first, as ExecStop= does.
+
+. /lib/lsb/init-functions
+
+NAME=corosync
+DESC="Corosync Cluster Engine"
+DAEMON=/usr/sbin/corosync
+CFGTOOL=/usr/sbin/corosync-cfgtool
+CONF=/etc/corosync/corosync.conf
+# written by corosync itself
+PIDFILE=/run/corosync.pid
+
+test -x $DAEMON || exit 0
+
+COROSYNC_INIT_TIMEOUT=60
+COROSYNC_OPTIONS=
+OPTIONS=
+# like the unit's EnvironmentFile=; OPTIONS as in Debian's former init script
+[ -r /etc/default/corosync ] && . /etc/default/corosync
+
+# like ConditionPathExists= and ConditionKernelCommandLine=
+can_start() {
+    if [ ! -e $CONF ]; then
+        log_warning_msg "Not starting $DESC: no $CONF (not part of a cluster)"
+        return 1
+    fi
+    if grep -qw nocluster /proc/cmdline; then
+        log_warning_msg "Not starting $DESC: 'nocluster' on the kernel command line"
+        return 1
+    fi
+    return 0
+}
+
+wait_for_ipc() {
+    tries=$((COROSYNC_INIT_TIMEOUT * 2))
+    while [ $tries -gt 0 ]; do
+        corosync-cpgtool >/dev/null 2>&1 && return 0
+        sleep 0.5
+        tries=$((tries - 1))
+    done
+    return 1
+}
+
+do_start() {
+    can_start || return 0
+    log_daemon_msg "Starting $DESC" "$NAME"
+    if start-stop-daemon --status --pidfile $PIDFILE --exec $DAEMON; then
+        log_end_msg 0
+        return 0
+    fi
+    # like StateDirectory= and LogsDirectory=
+    mkdir -p /var/lib/corosync /var/log/cluster
+    # without -f, corosync forks into the background itself
+    start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON \
+        -- $COROSYNC_OPTIONS $OPTIONS && wait_for_ipc
+    status=$?
+    log_end_msg $status
+    return $status
+}
+
+do_stop() {
+    log_daemon_msg "Stopping $DESC" "$NAME"
+    if start-stop-daemon --status --pidfile $PIDFILE --exec $DAEMON; then
+        # shut down through corosync, so the other nodes see it leave
+        $CFGTOOL -H --force >/dev/null 2>&1
+    fi
+    start-stop-daemon --stop --quiet --oknodo --retry TERM/30/KILL/5 \
+        --pidfile $PIDFILE --exec $DAEMON
+    status=$?
+    log_end_msg $status
+    return $status
+}
+
+case "$1" in
+    start)
+        do_start
+        ;;
+    stop)
+        do_stop
+        ;;
+    restart|force-reload)
+        do_stop && do_start
+        ;;
+    status)
+        status_of_proc -p $PIDFILE $DAEMON $NAME
+        ;;
+    *)
+        echo "Usage: /etc/init.d/$NAME {start|stop|restart|force-reload|status}" >&2
+        exit 3
+        ;;
+esac
