@@ -18,6 +18,16 @@ ifneq ($(wildcard /usr/include/systemd/sd-daemon.h),)
 enable-systemd=--enable-systemd
 endif
 
+# The pkg.corosync.lsbservice build profile is for Devuan and other
+# systemd-free Debian derivatives (see pve-common's and pve-manager's
+# pkg.*.lsbservice profiles): it installs an LSB init script mirroring
+# corosync.service instead of it, and no units (corosync-notifyd's init script
+# is installed by both builds). To build this variant, run:
+#   dpkg-buildpackage -b -us -uc -Ppkg.corosync.lsbservice
+ifneq (,$(filter pkg.corosync.lsbservice,$(DEB_BUILD_PROFILES)))
+LSBSERVICE = 1
+endif
+
 %:
 	dh $@
 
@@ -61,3 +71,22 @@ override_dh_auto_install-arch:
 
 execute_before_dh_gencontrol:
 	debian/check_header_deps
+
+ifdef LSBSERVICE
+# installed by debian/corosync.install and debian/corosync-notifyd.install
+execute_after_dh_install:
+	rm -rf debian/corosync/usr/lib/systemd debian/corosync-notifyd/usr/lib/systemd
+
+execute_after_dh_installinit:
+	dh_installinit -pcorosync --name=corosync
+
+override_dh_installsystemd:
+
+execute_after_dh_lintian:
+	install -d debian/corosync/usr/share/lintian/overrides
+	cat debian/corosync.lintian-overrides.lsbservice \
+	    >>debian/corosync/usr/share/lintian/overrides/corosync
+	install -d debian/corosync-notifyd/usr/share/lintian/overrides
+	cat debian/corosync-notifyd.lintian-overrides.lsbservice \
+	    >>debian/corosync-notifyd/usr/share/lintian/overrides/corosync-notifyd
+endif
