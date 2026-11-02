@@ -27,6 +27,7 @@ override_dh_autoreconf:
 
 # Explicit BASHPATH fixes reproducible build on merged-usr vs non-merged:
 override_dh_auto_configure:
+# TODO: consider dropping unencrypted/UDPU support in next major release
 	dh_auto_configure -- \
 	    BASHPATH=/bin/bash \
 	    --with-initconfigdir=/etc/default \
@@ -40,6 +41,8 @@ override_dh_auto_configure:
 	    --enable-xmlconf \
 	    $(enable-systemd) \
 	    --enable-vqsim \
+	    --enable-unencrypted \
+	    --enable-udpu \
 	    --disable-static
 
 override_dh_auto_build-indep:
