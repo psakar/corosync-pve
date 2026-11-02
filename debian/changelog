@@ -1,3 +1,18 @@
+corosync (3.2.0-pve1) trixie; urgency=medium
+
+  * update to Corosync 3.2.0
+    - fix CVE-2026-81665, CVE-2026-81665
+      (overflows affecting unencrypted setups)
+    - dynamically query ciphers from kronosnet
+    - remove unused zerocopy CPG support
+    - add support for storing qdevice information in votequorum data
+
+  * stay backwards compatible with existing setups that might not use
+    encryption - while not recommended, such setups might exist and should not
+    be broken with a minor upgrade
+
+ -- Proxmox Support Team <support@proxmox.com>  Mon, 02 Nov 2026 10:11:02 +0100
+
 corosync (3.1.10-pve3) trixie; urgency=medium
 
   * fix stale CPG group members when a node joins the cluster and its
